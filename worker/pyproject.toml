@@ -1,0 +1,14 @@
+[project]
+name = "3dgs-worker"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "celery[redis]>=5.4",
+    "redis>=5.0",
+    "pydantic>=2.7",
+    "pydantic-settings[yaml]>=2.3",
+]
+# numpy and opencv-python are pre-installed in the base image (grzgrzgrz/gaussian-splatting)
+
+[tool.setuptools]
+packages = []  # worker is a scripts app, not an installable package
