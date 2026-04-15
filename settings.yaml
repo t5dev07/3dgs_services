@@ -1,0 +1,19 @@
+redis:
+  url: redis://redis:6379
+  broker_db: 0
+  job_store_db: 1
+
+storage:
+  backend: local          # local | s3
+  data_dir: /data
+
+pipeline:
+  quality_preset: ultra     # fast | balanced | high | ultra
+  iterations: null          # null = use preset default
+
+logging:
+  level: INFO
+  max_bytes: 10485760       # 10 MB
+  backup_count: 5
+  info_file: /data/logs/app.log
+  error_file: /data/logs/error.log

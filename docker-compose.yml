@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - data:/data
+      - ./settings.yaml:/config/settings.yaml:ro
+    env_file: .env
+    environment:
+      SETTINGS_PATH: /config/settings.yaml
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./worker
+    restart: unless-stopped
+    volumes:
+      - data:/data
+      - ./settings.yaml:/config/settings.yaml:ro
+    env_file: .env
+    environment:
+      SETTINGS_PATH: /config/settings.yaml
+      QT_QPA_PLATFORM: offscreen
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  data:
+  redis-data:
