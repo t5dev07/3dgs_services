@@ -16,36 +16,43 @@ log = logging.getLogger(__name__)
 
 QUALITY_PRESETS: dict = {
     "fast": {
-        "target_frames": 120,
+        "extract_fps": 0.3,       # ~170 frames/9.5min — exhaustive OK ở frame count này
         "max_image_size": 1280,
-        "max_extract_fps": 8,
         "blur_threshold": 40.0,
         "dedupe_threshold": 2.5,
         "iterations": 4000,
+        "colmap_matcher": "exhaustive",
+        "apply_clahe": False,
     },
     "balanced": {
-        "target_frames": 220,
+        "extract_fps": 3.0,       # ~3 frames/s
         "max_image_size": 1600,
-        "max_extract_fps": 10,
         "blur_threshold": 30.0,
         "dedupe_threshold": 2.0,
-        "iterations": 7000,
+        "iterations": 15000,
+        "colmap_matcher": "sequential_loop",
+        "sequential_overlap": 10,
+        "apply_clahe": True,
     },
     "high": {
-        "target_frames": 400,
+        "extract_fps": 1.0,       # ~569 frames/9.5min
         "max_image_size": 2048,
-        "max_extract_fps": 15,
         "blur_threshold": 20.0,
         "dedupe_threshold": 1.5,
         "iterations": 15000,
+        "colmap_matcher": "sequential_loop",
+        "sequential_overlap": 15,
+        "apply_clahe": True,
     },
     "ultra": {
-        "target_frames": 512,
+        "extract_fps": 1.5,       # ~854 frames/9.5min
         "max_image_size": 2048,
-        "max_extract_fps": 20,
         "blur_threshold": 15.0,
         "dedupe_threshold": 1.0,
         "iterations": 30000,
+        "colmap_matcher": "sequential_loop",
+        "sequential_overlap": 20,
+        "apply_clahe": True,
     },
 }
 
@@ -84,12 +91,25 @@ def _extract_raw(video_path: Path, raw_dir: Path, fps: int, max_size: Optional[i
     return len(list(raw_dir.glob("*.jpg")))
 
 
+def _apply_clahe(img: np.ndarray) -> np.ndarray:
+    """Normalize exposure via CLAHE on the L-channel of LAB space.
+
+    Enhances subtle texture on flat/white surfaces (walls, ceilings) and
+    reduces auto-exposure inconsistencies across indoor walkthrough frames.
+    """
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    lab[:, :, 0] = clahe.apply(lab[:, :, 0])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
 def _select_frames(
     raw_dir: Path,
     out_dir: Path,
     target: int,
     blur_thresh: Optional[float],
     dedupe_thresh: Optional[float],
+    apply_clahe: bool = False,
 ) -> int:
     raw_frames = sorted(raw_dir.glob("frame_*.jpg"))
     if not raw_frames:
@@ -137,6 +157,12 @@ def _select_frames(
 
     for idx, src in enumerate(selected):
         dst = out_dir / f"frame_{idx + 1:04d}.jpg"
+        if apply_clahe:
+            img = cv2.imread(str(src))
+            if img is not None:
+                img = _apply_clahe(img)
+                cv2.imwrite(str(dst), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                continue
         try:
             os.link(src, dst)
         except OSError:
@@ -149,18 +175,20 @@ def run(ctx: PipelineContext, params: dict, on_progress: ProgressCallback) -> in
     on_progress("extract", 5, "Extracting frames from video...")
 
     duration = get_video_duration(ctx.video_path)
-    target = int(params.get("target_frames") or 220)
-    max_fps = int(params.get("max_extract_fps") or 10)
+    extract_fps = float(params.get("extract_fps") or 1.0)
     max_size = int(params.get("max_image_size") or 0) or None
 
-    fps = 3
-    if target and duration > 0:
-        fps = max(2, min(max_fps, int(math.ceil(target / max(duration, 1.0) * 1.5))))
-    else:
-        fps = max(2, max_fps)
+    # Target scales linearly with video duration — no artificial cap
+    target = max(30, int(duration * extract_fps)) if duration > 0 else 150
+
+    # Extract at 2× the target density so blur/dedupe filtering has headroom
+    raw_fps = min(10, extract_fps * 2)
+
+    log.info("[%s] Video duration=%.1fs, extract_fps=%.1f → target=%d frames (raw_fps=%.1f)",
+             ctx.job_id, duration, extract_fps, target, raw_fps)
 
     raw_dir = ctx.frames_dir.parent / "frames_raw"
-    raw_count = _extract_raw(ctx.video_path, raw_dir, fps, max_size)
+    raw_count = _extract_raw(ctx.video_path, raw_dir, raw_fps, max_size)
     if raw_count == 0:
         raise RuntimeError("No frames extracted from video")
 
@@ -168,6 +196,7 @@ def run(ctx: PipelineContext, params: dict, on_progress: ProgressCallback) -> in
         raw_dir, ctx.frames_dir, target,
         blur_thresh=params.get("blur_threshold"),
         dedupe_thresh=params.get("dedupe_threshold"),
+        apply_clahe=bool(params.get("apply_clahe", False)),
     )
     shutil.rmtree(raw_dir, ignore_errors=True)
 

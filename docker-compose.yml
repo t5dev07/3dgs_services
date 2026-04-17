@@ -33,6 +33,7 @@ services:
     volumes:
       - data:/data
       - ./settings.yaml:/config/settings.yaml:ro
+      - ./models:/app/models:ro
     env_file: .env
     environment:
       SETTINGS_PATH: /config/settings.yaml

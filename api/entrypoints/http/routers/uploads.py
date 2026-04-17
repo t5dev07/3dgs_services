@@ -1,7 +1,7 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from domain.jobs.schemas import CreateJobResponse, UploadUrlRequest
@@ -20,13 +20,18 @@ def _check_extension(filename: str) -> None:
         raise HTTPException(400, f"Unsupported file type: {ext!r}. Allowed: {sorted(_ALLOWED_EXTENSIONS)}")
 
 
+_VALID_PRESETS = {"fast", "balanced", "high", "ultra"}
+
 @router.post("/upload", response_model=CreateJobResponse, status_code=202)
 async def upload_video(
     file: UploadFile = File(...),
+    quality: str = Form("balanced"),
     svc: JobService = Depends(get_job_service),
 ):
     _check_extension(file.filename or "unknown")
-    job = await svc.create_from_upload(file.filename, file.file)
+    if quality not in _VALID_PRESETS:
+        raise HTTPException(400, f"Invalid quality preset: {quality!r}. Valid: {sorted(_VALID_PRESETS)}")
+    job = await svc.create_from_upload(file.filename, file.file, quality_preset=quality)
     return CreateJobResponse(job_id=job.id)
 
 

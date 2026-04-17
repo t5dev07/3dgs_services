@@ -32,7 +32,12 @@ def run(ctx: PipelineContext, params: dict, on_progress: ProgressCallback) -> No
     iterations = ctx.iterations if ctx.iterations is not None else int(params.get("iterations", 7000))
     on_progress("train", 45, f"Training OpenSplat ({iterations} iterations)...")
 
-    sparse_dir = ctx.colmap_dir / "sparse" / "0"
+    # Prefer depth-augmented reconstruction if available
+    sparse_dir = ctx.colmap_dir / "sparse_aug" / "0"
+    if not sparse_dir.exists():
+        sparse_dir = ctx.colmap_dir / "sparse_aug"
+    if not sparse_dir.exists():
+        sparse_dir = ctx.colmap_dir / "sparse" / "0"
     if not sparse_dir.exists():
         sparse_dir = ctx.colmap_dir / "sparse"
 

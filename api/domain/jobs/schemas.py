@@ -11,6 +11,7 @@ class JobResponse(BaseModel):
     progress: int
     message: str
     ply_url: Optional[str] = None
+    splat_url: Optional[str] = None
     preview_url: Optional[str] = None
     error: Optional[str] = None
     created_at: datetime

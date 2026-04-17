@@ -14,6 +14,7 @@ router = APIRouter(tags=["jobs"])
 
 def _to_response(job, svc: JobService) -> JobResponse:
     ply_url = svc.get_download_url(job.ply_key) if job.ply_key else None
+    splat_url = svc.get_download_url(job.splat_key) if job.splat_key else None
     preview_url = svc.get_download_url(job.preview_key) if job.preview_key else None
     return JobResponse(
         id=job.id,
@@ -22,6 +23,7 @@ def _to_response(job, svc: JobService) -> JobResponse:
         progress=job.progress,
         message=job.message,
         ply_url=ply_url,
+        splat_url=splat_url,
         preview_url=preview_url,
         error=job.error,
         created_at=job.created_at,
@@ -54,6 +56,19 @@ async def download_ply(job_id: str, svc: JobService = Depends(get_job_service)):
     if not path.exists():
         raise HTTPException(404, "PLY file missing from storage")
     return FileResponse(path, filename="model.ply", media_type="application/octet-stream")
+
+
+@router.get("/job/{job_id}/download/splat")
+async def download_splat(job_id: str, svc: JobService = Depends(get_job_service)):
+    job = await svc.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if not job.splat_key:
+        raise HTTPException(404, "Splat not ready")
+    path = svc.get_download_path(job.splat_key)
+    if not path.exists():
+        raise HTTPException(404, "Splat file missing from storage")
+    return FileResponse(path, filename="model.splat", media_type="application/octet-stream")
 
 
 @router.get("/job/{job_id}/download/preview")

@@ -41,11 +41,13 @@ def handle_job(self, job_id: str) -> None:
 
         out_dir = storage.get_output_dir(job_id)
 
+        quality_preset = job_data.get("quality_preset") or settings.pipeline.quality_preset
+
         ctx = PipelineContext(
             job_id=job_id,
             video_path=video_path,
             out_dir=out_dir,
-            quality_preset=settings.pipeline.quality_preset,
+            quality_preset=quality_preset,
             iterations=settings.pipeline.iterations,
         )
 
@@ -61,6 +63,7 @@ def handle_job(self, job_id: str) -> None:
             progress=100,
             message="Pipeline complete",
             ply_key=result.get("ply_key") or "",
+            splat_key=result.get("splat_key") or "",
             preview_key=result.get("preview_key") or "",
         )
         log.info("Job %s completed", job_id)

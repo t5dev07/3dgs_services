@@ -7,8 +7,10 @@ dependencies = [
     "redis>=5.0",
     "pydantic>=2.7",
     "pydantic-settings[yaml]>=2.3",
+    "onnxruntime-gpu>=1.18",
 ]
 # numpy and opencv-python are pre-installed in the base image (grzgrzgrz/gaussian-splatting)
+# onnxruntime-gpu: used for YOLOv8n person masking + Depth Anything V2 depth estimation
 
 [tool.setuptools]
 packages = []  # worker is a scripts app, not an installable package

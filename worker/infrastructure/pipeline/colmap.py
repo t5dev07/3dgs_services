@@ -53,6 +53,7 @@ def _run_colmap(
     max_image_size: Optional[int],
     guided_matching: bool,
     log_file: Path,
+    masks_dir: Optional[Path] = None,
 ) -> bool:
     db_path = colmap_dir / "database.db"
     sparse_dir = colmap_dir / "sparse"
@@ -75,6 +76,9 @@ def _run_colmap(
         cmd += ["--SiftExtraction.max_num_features", str(max_num_features)]
     if max_image_size:
         cmd += ["--SiftExtraction.max_image_size", str(max_image_size)]
+    if masks_dir and masks_dir.exists() and list(masks_dir.glob("*.png")):
+        cmd += ["--ImageReader.mask_path", str(masks_dir)]
+        log.info("COLMAP masking enabled: %s", masks_dir)
 
     result = _exec(cmd)
     if result.returncode != 0:
@@ -84,6 +88,7 @@ def _run_colmap(
             return _run_colmap(
                 frames_dir, colmap_dir, False, matcher, sequential_overlap,
                 loop_closure, max_num_features, max_image_size, guided_matching, log_file,
+                masks_dir=masks_dir,
             )
         return False
 
@@ -95,19 +100,28 @@ def _run_colmap(
 
     # Feature matching
     matcher_key = matcher.strip().lower()
-    if matcher_key not in ("exhaustive", "sequential"):
-        matcher_key = "sequential"
+    if matcher_key not in ("exhaustive", "sequential", "sequential_loop"):
+        matcher_key = "sequential_loop"
 
-    if matcher_key == "sequential":
+    if matcher_key in ("sequential", "sequential_loop"):
         base_cmd = [
             "colmap", "sequential_matcher",
             "--database_path", str(db_path),
             "--SiftMatching.use_gpu", gpu_flag,
             "--SequentialMatching.overlap", str(sequential_overlap),
-            "--SequentialMatching.loop_detection", "1" if loop_closure else "0",
         ]
         if guided_matching:
             base_cmd += ["--SiftMatching.guided_matching", "1"]
+        if matcher_key == "sequential_loop":
+            vocab_tree = Path("/app/models/vocab_tree_flickr100K_words256K.bin")
+            if vocab_tree.exists():
+                base_cmd += [
+                    "--SequentialMatching.loop_detection", "1",
+                    "--SequentialMatching.vocab_tree_path", str(vocab_tree),
+                ]
+                log.info("Sequential matching with vocab tree loop closure enabled")
+            else:
+                log.warning("Vocab tree not found at %s — loop closure disabled", vocab_tree)
         result = _exec(base_cmd)
     else:
         cmd = ["colmap", "exhaustive_matcher", "--database_path", str(db_path), "--SiftMatching.use_gpu", gpu_flag]
@@ -122,6 +136,7 @@ def _run_colmap(
             return _run_colmap(
                 frames_dir, colmap_dir, False, matcher, sequential_overlap,
                 loop_closure, max_num_features, max_image_size, guided_matching, log_file,
+                masks_dir=masks_dir,
             )
         return False
 
@@ -131,6 +146,10 @@ def _run_colmap(
         "--database_path", str(db_path),
         "--image_path", str(frames_dir),
         "--output_path", str(sparse_dir),
+        "--Mapper.init_min_tri_angle", "4",       # default 16° — relax for walkthrough/slow camera
+        "--Mapper.init_min_num_inliers", "50",    # default 100
+        "--Mapper.abs_pose_min_num_inliers", "15",
+        "--Mapper.abs_pose_min_inlier_ratio", "0.1",
     ])
     if result.returncode != 0:
         return False
@@ -158,6 +177,7 @@ def run(ctx: PipelineContext, params: dict, on_progress: ProgressCallback) -> No
         max_image_size=int(params.get("max_image_size", 0)) or None,
         guided_matching=bool(params.get("guided_matching", True)),
         log_file=ctx.log_file,
+        masks_dir=ctx.masks_dir,
     )
     if not ok:
         raise RuntimeError("COLMAP reconstruction failed — check log for details")

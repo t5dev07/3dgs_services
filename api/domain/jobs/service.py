@@ -26,6 +26,7 @@ class JobService:
         self,
         filename: str,
         stream: IO[bytes],
+        quality_preset: str = "balanced",
     ) -> Job:
         job_id = uuid.uuid4().hex[:12]
         input_key = f"uploads/{job_id}_{filename}"
@@ -37,6 +38,7 @@ class JobService:
             status=JobStatus.QUEUED,
             stage=JobStage.QUEUED,
             input_key=input_key,
+            quality_preset=quality_preset,
             message="Job queued",
             created_at=datetime.utcnow(),
         )
