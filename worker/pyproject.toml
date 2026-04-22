@@ -8,9 +8,12 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings[yaml]>=2.3",
     "onnxruntime-gpu>=1.18",
+    "opencv-python-headless>=4.9",
 ]
-# numpy and opencv-python are pre-installed in the base image (grzgrzgrz/gaussian-splatting)
-# onnxruntime-gpu: used for YOLOv8n person masking + Depth Anything V2 depth estimation
+# Base image (ghcr.io/nerfstudio-project/nerfstudio) ships: numpy, torch, gsplat,
+# nerfstudio (splatfacto + ns-train/ns-export), COLMAP, GLOMAP, ffmpeg.
+# dn-splatter installed separately in Dockerfile (git pip).
+# onnxruntime-gpu: YOLOv8n person masking + Depth Anything V2 depth estimation.
 
 [tool.setuptools]
 packages = []  # worker is a scripts app, not an installable package

@@ -10,6 +10,7 @@ Models downloaded to: ./models/
   - depth_anything_v2_vits.onnx               (~94 MB)  monocular depth for point cloud densification
   - vocab_tree_flickr100K_words256K.bin       (~200 MB) COLMAP sequential loop closure detection
 """
+import os
 import shutil
 import sys
 import urllib.request
@@ -84,9 +85,51 @@ def download_vocab_tree():
     print(f"[ok] {dst.name} — {dst.stat().st_size // (1024*1024)} MB")
 
 
+def download_viewcrafter():
+    """Download ViewCrafter_25_512 + DUSt3R weights (~6 GB total). Opt-in.
+
+    Skipped unless env VIEWCRAFTER_DOWNLOAD=1 is set, since weights are large
+    and the ViewCrafter step is disabled by default in settings.yaml.
+    """
+    if os.environ.get("VIEWCRAFTER_DOWNLOAD", "0").strip().lower() not in ("1", "true", "yes"):
+        print("[skip] ViewCrafter weights (set VIEWCRAFTER_DOWNLOAD=1 to download)")
+        return
+
+    vc_dir = MODELS_DIR / "viewcrafter"
+    vc_dir.mkdir(exist_ok=True)
+
+    dust3r = vc_dir / "DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+    if dust3r.exists():
+        print(f"[skip] {dust3r.name} already exists")
+    else:
+        url = "https://download.europe.naverlabs.com/ComputerVision/DUSt3R/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+        print(f"Downloading DUSt3R from {url} ...")
+        urllib.request.urlretrieve(url, dust3r)
+        print(f"[ok] {dust3r.name} — {dust3r.stat().st_size // (1024*1024)} MB")
+
+    ckpt = vc_dir / "ViewCrafter_25_512.ckpt"
+    if ckpt.exists():
+        print(f"[skip] {ckpt.name} already exists")
+        return
+
+    print("Downloading ViewCrafter_25_512 from HuggingFace...")
+    try:
+        from huggingface_hub import hf_hub_download
+        p = hf_hub_download("Drexubery/ViewCrafter_25_512", "model.ckpt")
+        shutil.copy(p, ckpt)
+    except ImportError:
+        print("  huggingface_hub not installed — install it or download manually")
+        return
+    except Exception as exc:
+        print(f"  ViewCrafter download failed: {exc}")
+        return
+    print(f"[ok] {ckpt.name} — {ckpt.stat().st_size // (1024*1024)} MB")
+
+
 if __name__ == "__main__":
     print(f"Model directory: {MODELS_DIR}\n")
     download_depth_anything()
     download_yolov8n()
     download_vocab_tree()
+    download_viewcrafter()
     print("\nDone. Start services with: sudo docker compose up")

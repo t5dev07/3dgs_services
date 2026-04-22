@@ -1,9 +1,11 @@
 """Pipeline orchestrator — runs all steps in order."""
 import logging
 
+from settings import settings
+
 from .context import PipelineContext, ProgressCallback
 from .extract import get_quality_params
-from . import extract, mask, colmap, depth, opensplat, postprocess, preview
+from . import extract, mask, colmap, depth_maps, transforms, dn_splatter, postprocess, preview
 
 log = logging.getLogger(__name__)
 
@@ -22,31 +24,42 @@ def run_pipeline(ctx: PipelineContext, on_progress: ProgressCallback) -> dict:
     # 1. Extract frames
     extract.run(ctx, params, on_progress)
 
-    # 2. Person masking for COLMAP (non-fatal — skip if model missing)
+    # 2. Person masking (non-fatal — COLMAP + Nerfstudio both treat 0=ignore)
     try:
         mask.run(ctx, on_progress)
     except Exception as exc:
         log.warning("[%s] Masking failed, continuing: %s", ctx.job_id, exc)
 
-    # 3. COLMAP
+    # 3. COLMAP SfM
     colmap.run(ctx, params, on_progress)
 
-    # 4. Depth augmentation of COLMAP point cloud (non-fatal)
+    # 4. Depth maps for dn-splatter supervision (non-fatal)
     try:
-        depth.run(ctx, params, on_progress)
+        depth_maps.run(ctx, params, on_progress)
     except Exception as exc:
-        log.warning("[%s] Depth augmentation failed, continuing: %s", ctx.job_id, exc)
+        log.warning("[%s] Depth map generation failed, continuing: %s", ctx.job_id, exc)
 
-    # 5. OpenSplat
-    opensplat.run(ctx, params, on_progress)
+    # 5. Nerfstudio transforms.json with depth + mask paths
+    transforms.run(ctx, params, on_progress)
 
-    # 6. Post-process: opacity filter + .splat export (non-fatal)
+    # 6. Optional: ViewCrafter synthetic frames for sparse regions
+    if settings.pipeline.viewcrafter.enabled:
+        try:
+            from . import viewcrafter
+            viewcrafter.run(ctx, params, on_progress)
+        except Exception as exc:
+            log.warning("[%s] ViewCrafter failed, continuing: %s", ctx.job_id, exc)
+
+    # 7. Train 3DGS with dn-splatter (depth + scale regularization)
+    dn_splatter.run(ctx, params, on_progress)
+
+    # 8. Post-process: opacity filter + .splat export (non-fatal)
     try:
         postprocess.run(ctx, on_progress)
     except Exception as exc:
         log.warning("[%s] Postprocess failed, continuing: %s", ctx.job_id, exc)
 
-    # 7. Preview video (non-fatal)
+    # 9. Preview video (non-fatal)
     try:
         preview.run(ctx, on_progress)
     except Exception as exc:

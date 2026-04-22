@@ -11,6 +11,40 @@ pipeline:
   quality_preset: ultra     # fast | balanced | high | ultra
   iterations: null          # null = use preset default
 
+  depth:
+    enabled: true
+    model_path: /app/models/depth_anything_v2_vits.onnx
+    unit_scale_factor: 0.001
+    min_correspondences: 5
+    skip_frames: 1
+
+  splatter:
+    method: dn-splatter        # dn-splatter (depth+normal supervision) | dn-splatter-big | splatfacto
+    use_scale_regularization: true
+    stop_split_at: 15000
+    ply_color_mode: sh_coeffs
+    # Depth loss — only applied when method is dn_splatter or dn_splatter_big
+    use_depth_loss: true
+    depth_loss_type: LogL1
+    depth_lambda: 0.2
+    # Normal loss uses pseudo-normals derived from depth maps (we don't ship mono normals)
+    use_normal_loss: true
+    use_normal_tv_loss: true
+    normal_supervision: depth     # mono | depth
+    normal_lambda: 0.1
+
+  viewcrafter:
+    enabled: false
+    model_dir: /app/models/viewcrafter
+    dust3r_ckpt: /app/models/viewcrafter/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth
+    variant: ViewCrafter_25_512
+    orbit_deg: 15.0
+    frames_per_orbit: 16
+    sparse_radius_m: 0.5
+    min_neighbors: 3
+    synthetic_mask_value: 128
+    max_keyframes: 20
+
 logging:
   level: INFO
   max_bytes: 10485760       # 10 MB
